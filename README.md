@@ -1,5 +1,30 @@
 [[简体中文](readme/README.zh_CN.md)] <- 点击查看中文页面。
 
+# Buzz Classroom
+
+This is a classroom-focused fork of [Buzz](https://github.com/chidiwilliams/buzz),
+an MIT-licensed offline transcription app. It keeps Buzz's local microphone
+recording and plain-text transcript workflow, and adds **Generate class notes**
+after a recording is complete.
+
+Class notes are structured for studying: numbered problems, formulas and units,
+worked steps, instructor corrections, and exam-ready takeaways. The app only
+sends the completed transcript—not the raw audio—to the configured
+OpenAI-compatible API after the user explicitly clicks the button. API keys are
+stored using the operating system keychain and are never committed to this
+repository.
+
+## Classroom workflow
+
+1. Record a class using **Live Recording** and review the editable transcript.
+2. Add your own API key under **Settings** if you want AI-assisted notes.
+3. Click **Generate class notes** to create an editable Markdown study guide.
+
+You can also keep everything offline: export the normal TXT transcript and
+transform it with any notes workflow you prefer.
+
+---
+
 # Buzz
 
 [Documentation](https://chidiwilliams.github.io/buzz/)

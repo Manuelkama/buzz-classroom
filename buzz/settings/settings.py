@@ -31,6 +31,7 @@ class Settings:
         RECORDING_TRANSCRIBER_EXPORT_MAX_ENTRIES = "recording-transcriber/export-max-entries"
         RECORDING_TRANSCRIBER_EXPORT_FILE_NAME = "recording-transcriber/export-file-name"
         RECORDING_TRANSCRIBER_HIDE_UNCONFIRMED = "recording-transcriber/hide-unconfirmed"
+        CLASS_NOTES_MODEL = "class-notes/model"
 
         PRESENTATION_WINDOW_TEXT_COLOR = "presentation-window/text-color"
         PRESENTATION_WINDOW_BACKGROUND_COLOR = "presentation-window/background-color"

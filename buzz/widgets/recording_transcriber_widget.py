@@ -11,7 +11,7 @@ import sounddevice
 from enum import auto
 from typing import Optional, Tuple, Any
 
-from PyQt6.QtCore import QThread, Qt, QThreadPool, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, QRunnable, QThread, Qt, QThreadPool, QTimer, pyqtSignal
 from PyQt6.QtGui import QTextCursor, QCloseEvent, QColor
 from PyQt6.QtWidgets import (
     QWidget,
@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
 )
 
 from buzz.dialogs import show_model_download_error_dialog
+from buzz.class_notes import ClassNotesGenerator, DEFAULT_CLASS_NOTES_MODEL
 from buzz.locale import _
 from buzz.model_loader import (
     ModelDownloader,
@@ -58,6 +59,33 @@ from buzz.widgets.icon import NewWindowIcon, FullscreenIcon, ColorBackgroundIcon
 
 REAL_CHARS_REGEX = re.compile(r'\w')
 NO_SPACE_BETWEEN_SENTENCES = re.compile(r'([.!?。！？])([A-Z])')
+
+
+class ClassNotesJobSignals(QObject):
+    success = pyqtSignal(str)
+    failed = pyqtSignal(str)
+
+
+class ClassNotesJob(QRunnable):
+    """Run the optional notes request away from the recording UI thread."""
+
+    def __init__(self, transcript: str, api_key: str, model: str, base_url: str) -> None:
+        super().__init__()
+        self.transcript = transcript
+        self.api_key = api_key
+        self.model = model
+        self.base_url = base_url
+        self.signals = ClassNotesJobSignals()
+
+    def run(self) -> None:
+        try:
+            notes = ClassNotesGenerator(
+                api_key=self.api_key, model=self.model, base_url=self.base_url
+            ).generate(self.transcript)
+            self.signals.success.emit(notes.markdown)
+        except Exception as error:
+            logging.exception("Class-notes generation failed")
+            self.signals.failed.emit(str(error))
 
 
 class RecordingTranscriberWidget(QWidget):
@@ -192,6 +220,10 @@ class RecordingTranscriberWidget(QWidget):
         self.translation_text_box = TextDisplayBox(self)
         self.translation_text_box.setPlaceholderText(_("Waiting for AI translation..."))
 
+        self.class_notes_text_box = TextDisplayBox(self)
+        self.class_notes_text_box.setPlaceholderText(_("Your class notes will appear here..."))
+        self.class_notes_text_box.hide()
+
         self.transcription_options_group_box = TranscriptionOptionsGroupBox(
             default_transcription_options=self.transcription_options,
             model_types=model_types,
@@ -228,6 +260,7 @@ class RecordingTranscriberWidget(QWidget):
         layout.addLayout(record_button_layout)
         layout.addWidget(self.transcription_text_box)
         layout.addWidget(self.translation_text_box)
+        layout.addWidget(self.class_notes_text_box)
 
         if not self.transcription_options.enable_llm_translation:
             self.translation_text_box.hide()
@@ -354,7 +387,52 @@ class RecordingTranscriberWidget(QWidget):
         self.copy_transcript_button.clicked.connect(self.on_copy_transcript_clicked)
         layout.addWidget(self.copy_transcript_button)
 
+        self.generate_class_notes_button = QPushButton(_("Generate class notes"), bar)
+        self.generate_class_notes_button.setToolTip(
+            _("Turn the completed transcript into structured study notes using your API key")
+        )
+        self.generate_class_notes_button.clicked.connect(self.on_generate_class_notes_clicked)
+        layout.addWidget(self.generate_class_notes_button)
+
         return bar
+
+    def on_generate_class_notes_clicked(self) -> None:
+        """Create notes only after the user explicitly chooses to send a transcript."""
+        transcript = self.transcription_text_box.toPlainText().strip()
+        if not transcript:
+            QMessageBox.information(self, _("Class notes"), _("Record or paste a transcript first."))
+            return
+
+        api_key = get_password(Key.OPENAI_API_KEY)
+        if not api_key:
+            QMessageBox.information(
+                self,
+                _("Class notes"),
+                _("Add your API key in Settings before generating class notes."),
+            )
+            return
+
+        model = self.settings.value(
+            Settings.Key.CLASS_NOTES_MODEL, DEFAULT_CLASS_NOTES_MODEL
+        )
+        base_url = self.settings.value(Settings.Key.CUSTOM_OPENAI_BASE_URL, "")
+        self.generate_class_notes_button.setEnabled(False)
+        self.generate_class_notes_button.setText(_("Generating notes…"))
+        job = ClassNotesJob(transcript, api_key, model, base_url)
+        job.signals.success.connect(self.on_class_notes_success)
+        job.signals.failed.connect(self.on_class_notes_failure)
+        QThreadPool.globalInstance().start(job)
+
+    def on_class_notes_success(self, markdown: str) -> None:
+        self.class_notes_text_box.setPlainText(markdown)
+        self.class_notes_text_box.show()
+        self.generate_class_notes_button.setEnabled(True)
+        self.generate_class_notes_button.setText(_("Generate class notes"))
+
+    def on_class_notes_failure(self, error: str) -> None:
+        self.generate_class_notes_button.setEnabled(True)
+        self.generate_class_notes_button.setText(_("Generate class notes"))
+        QMessageBox.warning(self, _("Class notes"), _("Could not generate class notes: ") + error)
 
     def on_copy_transcript_clicked(self):
         """Handle copy transcript button click"""

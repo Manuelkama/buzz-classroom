@@ -30,6 +30,7 @@ class TestRecordingTranscriberWidget:
             )
             qtbot.add_widget(widget)
             assert widget.windowTitle() == _("Live Recording")
+            assert widget.generate_class_notes_button.text() == _("Generate class notes")
 
             # Test will hang if we call close before mock_sounddevice thread has fully started.
             time.sleep(3)
