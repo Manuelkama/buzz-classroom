@@ -129,6 +129,7 @@ class RecordingTranscriberWidget(QWidget):
     def _init_state(self) -> None:
         self.translation_thread = None
         self.translator = None
+        self.class_notes_job: Optional[ClassNotesJob] = None
         self.transcripts = []
         self.translations = []
         self.current_status = self.RecordingStatus.STOPPED
@@ -418,18 +419,22 @@ class RecordingTranscriberWidget(QWidget):
         base_url = self.settings.value(Settings.Key.CUSTOM_OPENAI_BASE_URL, "")
         self.generate_class_notes_button.setEnabled(False)
         self.generate_class_notes_button.setText(_("Generating notes…"))
-        job = ClassNotesJob(transcript, api_key, model, base_url)
-        job.signals.success.connect(self.on_class_notes_success)
-        job.signals.failed.connect(self.on_class_notes_failure)
-        QThreadPool.globalInstance().start(job)
+        # Keep a Python reference until the Qt worker completes.  This avoids a
+        # worker being collected while a long lecture is being summarized.
+        self.class_notes_job = ClassNotesJob(transcript, api_key, model, base_url)
+        self.class_notes_job.signals.success.connect(self.on_class_notes_success)
+        self.class_notes_job.signals.failed.connect(self.on_class_notes_failure)
+        QThreadPool.globalInstance().start(self.class_notes_job)
 
     def on_class_notes_success(self, markdown: str) -> None:
+        self.class_notes_job = None
         self.class_notes_text_box.setPlainText(markdown)
         self.class_notes_text_box.show()
         self.generate_class_notes_button.setEnabled(True)
         self.generate_class_notes_button.setText(_("Generate class notes"))
 
     def on_class_notes_failure(self, error: str) -> None:
+        self.class_notes_job = None
         self.generate_class_notes_button.setEnabled(True)
         self.generate_class_notes_button.setText(_("Generate class notes"))
         QMessageBox.warning(self, _("Class notes"), _("Could not generate class notes: ") + error)
